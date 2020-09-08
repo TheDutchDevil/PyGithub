@@ -108,6 +108,7 @@ class Github(object):
         per_page=DEFAULT_PER_PAGE,
         verify=True,
         retry=None,
+        token_list=None
     ):
         """
         :param login_or_token: string
@@ -153,6 +154,7 @@ class Github(object):
             per_page,
             verify,
             retry,
+            token_list
         )
 
     def __get_FIX_REPO_GET_GIT_REF(self):

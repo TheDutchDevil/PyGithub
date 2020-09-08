@@ -65,6 +65,7 @@ from io import IOBase
 import requests
 
 from . import Consts, GithubException
+from github.RequesterTokenStorage import RequesterTokenStorage
 
 
 class RequestsResponse:
@@ -266,21 +267,24 @@ class Requester:
         per_page,
         verify,
         retry,
+        token_list
     ):
         self._initializeDebugFeature()
 
-        if password is not None:
-            login = login_or_token
-            self.__authorizationHeader = "Basic " + base64.b64encode(
-                (login + ":" + password).encode("utf-8")
-            ).decode("utf-8").replace("\n", "")
-        elif login_or_token is not None:
-            token = login_or_token
-            self.__authorizationHeader = "token " + token
-        elif jwt is not None:
-            self.__authorizationHeader = "Bearer " + jwt
+
+        if token_list is not None:
+            self._token_storage = RequesterTokenStorage(token_list, None)
         else:
-            self.__authorizationHeader = None
+            self._token_storage = None
+
+        
+
+        self.login_or_token = login_or_token    
+        self.password = password
+        self.jwt = jwt
+
+        self.should_authenticate = token_list is not None or password is not None \
+                                    or login_or_token is not None or jwt is not None
 
         self.__base_url = base_url
         o = urllib.parse.urlparse(base_url)
@@ -312,6 +316,44 @@ class Requester:
         )
         self.__userAgent = user_agent
         self.__verify = verify
+
+    def build_authentication_header(self):
+        '''
+        Returns a tuple containg the content of the authentication header, and
+        a function that should be executed after the end of the request, that 
+        should be used to update the rate limit tracking
+        '''
+
+        def rate_limit_update(rtl, token_object):
+            '''
+            Updates the rate limit and releases the lock
+            '''
+
+            print(f"Updated the rate limit to {rtl} for {token_object['token']}")
+            if rtl is not None:
+                token_object["limit"] = rtl
+            token_object["lock"].release()
+
+        empty_lambda = lambda rtl : None
+
+        if self._token_storage is not None:
+            token = self._token_storage.get_token()
+
+            if token is None:
+                raise Exception("No token available!")
+            else:
+                print(f"Using: as token {'token ' + token['token']}")
+                return ("token " + token["token"], lambda rtl, token = token : rate_limit_update(rtl, token))
+        elif self.password is not None:
+            login = self.login_or_token
+            return ("Basic " + base64.b64encode(
+                (login + ":" + self.password).encode("utf-8")
+            ).decode("utf-8").replace("\n", ""), empty_lambda)
+        elif self.login_or_token is not None:
+            token = self.login_or_token
+            return ("token " + token, empty_lambda)
+        elif self.jwt is not None:
+            return ("Bearer " + self.jwt, empty_lambda)
 
     def requestJsonAndCheck(self, verb, url, parameters=None, headers=None, input=None):
         return self.__check(
@@ -471,30 +513,36 @@ class Requester:
         if requestHeaders is None:
             requestHeaders = dict()
 
-        self.__authenticate(url, requestHeaders, parameters)
-        requestHeaders["User-Agent"] = self.__userAgent
+        try:
+            rtl_update_function = self.__authenticate(url, requestHeaders, parameters)
+            requestHeaders["User-Agent"] = self.__userAgent
 
-        url = self.__makeAbsoluteUrl(url)
-        url = self.__addParametersToUrl(url, parameters)
+            url = self.__makeAbsoluteUrl(url)
+            url = self.__addParametersToUrl(url, parameters)
 
-        encoded_input = None
-        if input is not None:
-            requestHeaders["Content-Type"], encoded_input = encode(input)
+            encoded_input = None
+            if input is not None:
+                requestHeaders["Content-Type"], encoded_input = encode(input)
 
-        self.NEW_DEBUG_FRAME(requestHeaders)
+            self.NEW_DEBUG_FRAME(requestHeaders)
 
-        status, responseHeaders, output = self.__requestRaw(
-            cnx, verb, url, requestHeaders, encoded_input
-        )
-
-        if (
-            Consts.headerRateRemaining in responseHeaders
-            and Consts.headerRateLimit in responseHeaders
-        ):
-            self.rate_limiting = (
-                int(responseHeaders[Consts.headerRateRemaining]),
-                int(responseHeaders[Consts.headerRateLimit]),
+            status, responseHeaders, output = self.__requestRaw(
+                cnx, verb, url, requestHeaders, encoded_input
             )
+
+            if (
+                Consts.headerRateRemaining in responseHeaders
+                and Consts.headerRateLimit in responseHeaders
+            ):
+                self.rate_limiting = (
+                    int(responseHeaders[Consts.headerRateRemaining]),
+                    int(responseHeaders[Consts.headerRateLimit]),
+                )
+        finally:
+            if Consts.headerRateRemaining in responseHeaders:                
+                rtl_update_function(int(responseHeaders[Consts.headerRateRemaining]))
+            else:
+                rtl_update_function(None)
         if Consts.headerRateReset in responseHeaders:
             self.rate_limiting_resettime = int(responseHeaders[Consts.headerRateReset])
 
@@ -536,11 +584,24 @@ class Requester:
         return status, responseHeaders, output
 
     def __authenticate(self, url, requestHeaders, parameters):
+        '''
+        This function sets the correct method of authentication, additionally,
+        it returns a lambda that can be used to 
+        '''
+        update_lambda = lambda rtl : None
         if self.__clientId and self.__clientSecret and "client_id=" not in url:
             parameters["client_id"] = self.__clientId
             parameters["client_secret"] = self.__clientSecret
-        if self.__authorizationHeader is not None:
-            requestHeaders["Authorization"] = self.__authorizationHeader
+        if self.should_authenticate:
+            header_tuple = self.build_authentication_header()
+            requestHeaders["Authorization"] = header_tuple[0]
+            update_lambda = header_tuple[1]
+
+
+        return update_lambda
+
+        
+
 
     def __makeAbsoluteUrl(self, url):
         # URLs generated locally will be relative to __base_url
