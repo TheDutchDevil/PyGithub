@@ -5,6 +5,7 @@ jobs
 '''
 
 import threading
+import random
 
 
 class RequesterTokenStorage:
@@ -22,6 +23,8 @@ class RequesterTokenStorage:
                 "lock": threading.Lock()
             })
 
+        print(self.__tokens)
+
             # Ideally we want to check the rate limit of all tokens provided
             # to us
 
@@ -37,8 +40,8 @@ class RequesterTokenStorage:
         current_scans = 0
 
         # Attempt to acquire a token from the list of tokens
-        while current_scans <= max_scans:
-            for token in self.__tokens:
+        while current_scans <= max_scans and token_ready is None:
+            for token in sorted(self.__tokens,key=lambda _: random.random()):
                 if token["limit"] > 30:
                     if token["lock"].acquire(blocking=False):
                         token_ready = token
