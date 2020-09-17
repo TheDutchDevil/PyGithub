@@ -1,14 +1,13 @@
-'''
-A class used to manage access to a collection of tokens. Can be used to most
-efficiently utilize a set of tokens that are available for setting scraping
-jobs 
-'''
-
 import threading
 import random
 
 
 class RequesterTokenStorage:
+    '''
+    A class used to manage access to a collection of tokens. Can be used to most
+    efficiently utilize a set of tokens that are available for setting scraping
+    jobs 
+    '''
 
     __tokens = []
 
@@ -22,8 +21,6 @@ class RequesterTokenStorage:
                 "limit": 5000,
                 "lock": threading.Lock()
             })
-
-        print(self.__tokens)
 
             # Ideally we want to check the rate limit of all tokens provided
             # to us
@@ -53,3 +50,10 @@ class RequesterTokenStorage:
             print("Unable to acquire a token")
 
         return token_ready
+
+    def get_max_limit(self):
+        # 5000 requests per token is the max limit
+        return len(self.__tokens) * 5000
+    
+    def get_current_limit(self):
+        return sum([token["limit"] for token in self.__tokens])

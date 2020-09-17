@@ -328,8 +328,6 @@ class Requester:
             '''
             Updates the rate limit and releases the lock
             '''
-
-            print(f"Updated the rate limit to {rtl} for {token_object['token']}")
             if rtl is not None:
                 token_object["limit"] = rtl
             token_object["lock"].release()
