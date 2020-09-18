@@ -340,7 +340,6 @@ class Requester:
             if token is None:
                 raise Exception("No token available!")
             else:
-                print(f"Using: as token {'token ' + token['token']}")
                 return ("token " + token["token"], lambda rtl, token = token : rate_limit_update(rtl, token))
         elif self.password is not None:
             login = self.login_or_token

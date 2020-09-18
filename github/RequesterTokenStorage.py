@@ -32,17 +32,17 @@ class RequesterTokenStorage:
 
         token_ready = None
 
-        # We will check the entire list 3 times
+        # We will check the entire list 3 times, allowing a wait time of 
+        # 200 ms per block
         max_scans = 3
         current_scans = 0
 
         # Attempt to acquire a token from the list of tokens
         while current_scans <= max_scans and token_ready is None:
             for token in sorted(self.__tokens,key=lambda _: random.random()):
-                if token["limit"] > 30:
-                    if token["lock"].acquire(blocking=False):
-                        token_ready = token
-                        break
+                if token["lock"].acquire(blocking=True, timeout=.2):
+                    token_ready = token
+                    break
 
             current_scans += 1
 
