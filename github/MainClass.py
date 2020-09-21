@@ -197,6 +197,7 @@ class Github(object):
             self.get_rate_limit()
         return self.__requester.rate_limiting
 
+
     @property
     def rate_limiting_resettime(self):
         """
@@ -217,6 +218,10 @@ class Github(object):
         """
         headers, data = self.__requester.requestJsonAndCheck("GET", "/rate_limit")
         return RateLimit.RateLimit(self.__requester, headers, data["resources"], True)
+
+    
+    def get_rate_limit_token_storage(self):
+        self.__requester.get_token_storage_rate_limit()
 
     @property
     def oauth_scopes(self):

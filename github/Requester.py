@@ -317,6 +317,15 @@ class Requester:
         self.__userAgent = user_agent
         self.__verify = verify
 
+    def get_token_storage_rate_limit(self):
+        if self._token_storage is None:
+            return None
+        else:
+            return {
+                "max_limit": self._token_storage.get_max_limit(),
+                "current_limit": self._token_storage.get_current_limit()
+            }
+
     def build_authentication_header(self):
         '''
         Returns a tuple containg the content of the authentication header, and
