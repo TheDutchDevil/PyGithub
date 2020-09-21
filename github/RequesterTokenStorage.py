@@ -1,5 +1,6 @@
 import threading
 import random
+import datetime
 
 
 class RequesterTokenStorage:
@@ -25,12 +26,28 @@ class RequesterTokenStorage:
             # Ideally we want to check the rate limit of all tokens provided
             # to us
 
+    def __update_reset_times(self):
+        '''
+        Goes through all tokens and attempts to reset their token limits based
+        on the raw reset time as returned by GitHub
+        '''
+        for token in self.__tokens:
+            if "reset_time" in token:
+                if token["lock"].acquire(blocking=False):
+                    try:
+                        if datetime.datetime.fromtimestamp(token["reset_time"]) > datetime.datetime.now():
+                            token["limit"] = 5000
+                    finally:
+                        token["lock"].release()
+
     def get_token(self):
         '''
         Function that returns a token with enough requests left
         '''
 
         token_ready = None
+
+        self.__update_reset_times()
 
         # We will check the entire list 3 times, allowing a wait time of 
         # 200 ms per block
@@ -56,4 +73,5 @@ class RequesterTokenStorage:
         return len(self.__tokens) * 5000
     
     def get_current_limit(self):
+        self.__update_reset_times()
         return sum([token["limit"] for token in self.__tokens])

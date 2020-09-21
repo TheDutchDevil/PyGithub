@@ -324,23 +324,27 @@ class Requester:
         should be used to update the rate limit tracking
         '''
 
-        def rate_limit_update(rtl, token_object):
+        def rate_limit_update(rtl, reset_time, token_object):
             '''
             Updates the rate limit and releases the lock
             '''
-            if rtl is not None:
-                token_object["limit"] = rtl
-            token_object["lock"].release()
+            try:
+                if rtl is not None:
+                    token_object["limit"] = rtl
+                if reset_time is not None:
+                    token_object["reset_time"] = int(reset_time)
+            finally:
+                token_object["lock"].release()
 
-        empty_lambda = lambda rtl : None
+        empty_lambda = lambda rtl, reset_time : None
 
         if self._token_storage is not None:
             token = self._token_storage.get_token()
 
             if token is None:
-                raise Exception("No token available!")
+                return ("", empty_lambda)
             else:
-                return ("token " + token["token"], lambda rtl, token = token : rate_limit_update(rtl, token))
+                return ("token " + token["token"], lambda rtl, reset_time, token = token : rate_limit_update(rtl, reset_time, token))
         elif self.password is not None:
             login = self.login_or_token
             return ("Basic " + base64.b64encode(
@@ -351,6 +355,8 @@ class Requester:
             return ("token " + token, empty_lambda)
         elif self.jwt is not None:
             return ("Bearer " + self.jwt, empty_lambda)
+        else:
+            return ("", empty_lambda)
 
     def requestJsonAndCheck(self, verb, url, parameters=None, headers=None, input=None):
         return self.__check(
@@ -536,10 +542,15 @@ class Requester:
                     int(responseHeaders[Consts.headerRateLimit]),
                 )
         finally:
-            if Consts.headerRateRemaining in responseHeaders:                
-                rtl_update_function(int(responseHeaders[Consts.headerRateRemaining]))
+            if Consts.headerRateRemaining in responseHeaders:
+                reset_time = None 
+                
+                if Consts.headerRateReset in responseHeaders:
+                    reset_time = responseHeaders[Consts.headerRateReset]
+
+                rtl_update_function(int(responseHeaders[Consts.headerRateRemaining]), reset_time)
             else:
-                rtl_update_function(None)
+                rtl_update_function(None, None)
         if Consts.headerRateReset in responseHeaders:
             self.rate_limiting_resettime = int(responseHeaders[Consts.headerRateReset])
 
