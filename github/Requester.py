@@ -319,6 +319,7 @@ class Requester:
 
     def get_token_storage_rate_limit(self):
         if self._token_storage is None:
+            print("token storage is none")
             return None
         else:
             return {

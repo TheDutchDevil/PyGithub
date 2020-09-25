@@ -221,7 +221,7 @@ class Github(object):
 
     
     def get_rate_limit_token_storage(self):
-        self.__requester.get_token_storage_rate_limit()
+        return self.__requester.get_token_storage_rate_limit()
 
     @property
     def oauth_scopes(self):

@@ -35,7 +35,7 @@ class RequesterTokenStorage:
             if "reset_time" in token:
                 if token["lock"].acquire(blocking=False):
                     try:
-                        if datetime.datetime.fromtimestamp(token["reset_time"]) > datetime.datetime.now():
+                        if datetime.datetime.fromtimestamp(token["reset_time"]) <= datetime.datetime.now():
                             token["limit"] = 5000
                     finally:
                         token["lock"].release()
